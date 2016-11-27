@@ -189,7 +189,7 @@ class MsgAutoSender():
         self.data["txtLoginEMail"] = account
         self.data["txtLoginPwd"] = self.pwd_input("Please input your baihe account password: ")
         while True:
-            msg = raw_input("Please input want you want to send, input Enter button to break. ")
+            msg = raw_input("Please input what you want to send, input Enter button to break. ")
             if not msg:
                 break
             else:
