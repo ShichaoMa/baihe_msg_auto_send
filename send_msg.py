@@ -23,8 +23,8 @@ class MsgAutoSender():
     messages = ["你好[微笑]"]
 
     data = {
-        'txtLoginEMail': "18353130797",
-        'txtLoginPwd': "l270515529",
+        'txtLoginEMail': "",
+        'txtLoginPwd': "",
         'chkRememberMe': "",
         'codeId': "",
         'codeValue': '',
@@ -146,21 +146,21 @@ class MsgAutoSender():
     def send_msg(self, opener, id):
         s = self.get_have_sent_girls_set()
         if id not in s:
-            d = quote(random.choice(self.messages))
+            msg = random.choice(self.messages)
+            d = quote(msg)
             url = self.url5 % (id, d)
             req = Request(url=url, headers=self.headers)
             resp = opener.open(req)
             buf = resp.read()
             recv = json.loads(re.search(r"\((\{.*\})\)", buf).group(1), encoding="gbk")
-            print "Uecv data is %s" % recv
             code = recv["code"]
-            print "Send request to %s, reponse code is %s" % (id, code)
+            print "Send %s to %s, status code is %s" % (msg.decode("utf-8"), id, code)
             if code == 200:
                 s.add(id)
             else:
                 raise SendMessageError("code: %s error: %s" % (code, recv["msg"].encode("utf-8")))
         else:
-            print "Shis girl has been sent, don't molesting her any more. "
+            print "This girl has been sent, don't molesting her any more. "
 
     def pwd_input(self, msg=''):
         import msvcrt, sys
@@ -189,7 +189,7 @@ class MsgAutoSender():
         self.data["txtLoginEMail"] = account
         self.data["txtLoginPwd"] = self.pwd_input("Please input your baihe account password: ")
         while True:
-            msg = raw_input("Please input want you want to send, input break to stop. ")
+            msg = raw_input("Please input want you want to send, input Enter button to break. ")
             if not msg:
                 break
             else:
