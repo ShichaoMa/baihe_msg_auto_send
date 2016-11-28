@@ -1,17 +1,39 @@
 # -*- coding:utf-8 -*-
-import os, json, re, math
-from urllib import quote, urlencode, urlopen
-from cookielib import LWPCookieJar, Cookie
-from urllib2 import Request, build_opener, HTTPCookieProcessor
-import time, traceback, random
+import os
+import re
+import sys
+import json
+import math
+import time
+import random
+import logging
+
 from PIL import Image
 from StringIO import StringIO
+from urllib import quote, urlencode
+from cookielib import LWPCookieJar, Cookie
+from urllib2 import Request, build_opener, HTTPCookieProcessor
+
+try:
+    from msvcrt import getch
+except ImportError:
+    def getch():
+        import tty, termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
 
 
 class SendMessageError(Exception):
     pass
 
-class MsgAutoSender():
+
+class MsgAutoSender(object):
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36',
@@ -67,18 +89,20 @@ class MsgAutoSender():
                                  rest={},
                                  rfc2109=False)
 
-    def get_have_sent_girls_set(self, s=[set()]):
-        if not s[0]:
-            try:
-                s[0] = set(open("have_send_list.txt").read().split(","))
-            except Exception:
-                traceback.print_exc()
-        return s[0]
+    logger = logging.getLogger("send_msg")
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
+
+    try:
+        have_send_list = set(open("have_send_list.txt").read().strip(",").split(","))
+    except IOError:
+        have_send_list = set()
 
     def get_account_times(self, opener):
         resp = opener.open(self.url7)
         buf = resp.read()
         data = json.loads(re.search(r"\((\{.*\})\)", buf).group(1), encoding="gbk")
+        self.logger.debug("Check whether need input captcha or not. ")
         if data["data"]["showCode"]:
             return self.get_captcha(opener)
         else:
@@ -92,6 +116,7 @@ class MsgAutoSender():
         return raw_input("Please input captcha recognization: "), tmpId
 
     def send_captcha(self, opener, captcha, tmpId):
+        self.logger.debug("Send captcha. ")
         url = self.url8 % (tmpId, captcha)
         req = Request(url=url, headers=self.headers)
         resp = opener.open(req)
@@ -103,32 +128,44 @@ class MsgAutoSender():
         url = self.url1 + urlencode(self.data)
         req = Request(url=url, headers=self.headers)
         resp = opener.open(req)
-        print "Login first jsonp response code:%s"%resp.code
+        data = json.loads(re.search(r"\((\{.*\})\)", resp.read()).group(1), encoding="gbk")
+        self.logger.debug("Login first jsonp response state:%s"%data["state"])
+
+        if data["state"] == 0:
+            return "Wrong account or password. "
+
         req = Request(url=self.url2, headers=self.headers)
         resp = opener.open(req)
-        print "Login second response code:%s"%resp.code
+        self.logger.debug("Login second state code:%s"%resp.code)
 
     def get_auth_cookies(self, opener):
-        captcha, tmpId = self.get_account_times(opener)
-        while not self.send_captcha(opener, captcha, tmpId):
+        while True:
+            self.enter_password()
             captcha, tmpId = self.get_account_times(opener)
-        self.data["codeValue"] = captcha
-        self.data["codeId"] = tmpId
-        self.login(opener)
+            if tmpId:
+                while not self.send_captcha(opener, captcha, tmpId):
+                    captcha, tmpId = self.get_account_times(opener)
+            self.data["codeValue"] = captcha
+            self.data["codeId"] = tmpId
+            result = self.login(opener)
+            if result:
+                self.logger.info(result)
+            else:
+                break
 
     def get_search_cookies(self, opener):
         req = Request(url=self.url4, headers=self.headers)
         resp = opener.open(req)
-        print "Finish get default search cookies, response code%s" % resp.code
+        self.logger.debug("Finish get default search cookies, response code:%s" % resp.code)
 
     def search(self, opener):
         conti = True
         count = 1
         while conti:
             req = Request(url=self.url3 % count, headers=self.headers)
-            print "Start to find girls. "
+            self.logger.debug("Start to find girls. ")
             resp = opener.open(req)
-            print "Search response code:%s" % resp.code
+            self.logger.debug("Search response code:%s" % resp.code)
             buf = resp.read()
             data = json.loads(re.search(r"\((\{.*\})\)", buf).group(1), encoding="gbk")
             if data["result"]:
@@ -144,7 +181,8 @@ class MsgAutoSender():
                 self.send_msg(opener, id)
 
     def send_msg(self, opener, id):
-        s = self.get_have_sent_girls_set()
+
+        s = self.have_send_list
         if id not in s:
             msg = random.choice(self.messages)
             d = quote(msg)
@@ -154,28 +192,27 @@ class MsgAutoSender():
             buf = resp.read()
             recv = json.loads(re.search(r"\((\{.*\})\)", buf).group(1), encoding="gbk")
             code = recv["code"]
-            print "Send %s to %s, status code is %s" % (msg.decode("utf-8"), id, code)
+            self.logger.debug("Send %s to %s, status code is %s" % (msg.decode("utf-8"), id, code))
             if code == 200:
                 s.add(id)
             else:
                 raise SendMessageError("code: %s error: %s" % (code, recv["msg"].encode("utf-8")))
         else:
-            print "This girl has been sent, don't molesting her any more. "
+            self.logger.debug("This girl has been sent, don't molesting her any more. ")
 
     def pwd_input(self, msg=''):
-        import msvcrt, sys
 
         if msg != '':
             sys.stdout.write(msg)
         chars = []
         while True:
-            newChar = msvcrt.getch()
+            newChar = getch()
             if newChar in '\3\r\n':  # 如果是换行，Ctrl+C，则输入结束
                 print ''
                 if newChar in '\3':  # 如果是Ctrl+C，则将输入清空，返回空字符串
                     chars = []
                 break
-            elif newChar == '\b':  # 如果是退格，则删除末尾一位
+            elif newChar == '\b' or ord(newChar) == 127:  # 如果是退格，则删除末尾一位
                 if chars:
                     del chars[-1]
                     sys.stdout.write('\b \b')  # 左移一位，用空格抹掉星号，再退格
@@ -184,10 +221,12 @@ class MsgAutoSender():
                 sys.stdout.write('*')  # 显示为星号
         return ''.join(chars)
 
-    def enter(self):
+    def enter_password(self):
         account = raw_input("Please input your baihe account number: ")
         self.data["txtLoginEMail"] = account
         self.data["txtLoginPwd"] = self.pwd_input("Please input your baihe account password: ")
+
+    def enter_msg(self):
         while True:
             msg = raw_input("Please input what you want to send, input Enter button to break. ")
             if not msg:
@@ -200,14 +239,14 @@ class MsgAutoSender():
                 self.messages.append(msg)
 
     def start(self):
-        self.enter()
+        self.enter_msg()
         cookie = LWPCookieJar()
         cookie.set_cookie(self.acc_token)
         have_load = False
         try:
             if os.path.exists(("baihe.cookie")):
                 cookie.load("baihe.cookie", True, True)
-                print "Load cookies..."
+                self.logger.debug("Load cookies...")
                 have_load = True
             opener = build_opener(HTTPCookieProcessor(cookie))
             if not have_load:
@@ -216,20 +255,18 @@ class MsgAutoSender():
             while True:
                 try:
                     if self.search(opener) == "finished":
-                        print "No more girls to send. "
+                        self.logger.debug("No more girls to send. ")
                         break
-                except Exception:
+                except Exception, e:
                     time.sleep(1)
-                    traceback.print_exc()
-                    cookie = LWPCookieJar()
-                    cookie.set_cookie(self.acc_token)
-                    opener = build_opener(HTTPCookieProcessor(cookie))
+                    self.logger.error(e)
                     self.get_auth_cookies(opener)
+                    self.get_search_cookies(opener)
 
         except KeyboardInterrupt:
-            open("have_send_list.txt", "w").write(",".join(self.get_have_sent_girls_set()))
+            open("have_send_list.txt", "w").write(",".join(self.have_send_list))
         finally:
-            print "Save cookies. "
+            self.logger.debug("Save cookies... ")
             cookie.save("baihe.cookie", True, True)
 
 
