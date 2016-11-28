@@ -133,6 +133,7 @@ class MsgAutoSender(object):
 
         if data["state"] == 0:
             return "Wrong account or password. "
+
         req = Request(url=self.url2, headers=self.headers)
         resp = opener.open(req)
         self.logger.debug("Login second state code:%s"%resp.code)
@@ -276,6 +277,5 @@ class MsgAutoSender(object):
 if __name__ == "__main__":
     MsgAutoSender().start()
     #MsgAutoSender().search(build_opener())
-    #MsgAutoSender().send_msg(build_opener(), 141711936)
 
 
