@@ -11,6 +11,7 @@ import logging
 from PIL import Image
 from StringIO import StringIO
 from urllib import quote, urlencode
+from threading import Thread, RLock
 from cookielib import LWPCookieJar, Cookie
 from urllib2 import Request, build_opener, HTTPCookieProcessor
 
@@ -42,7 +43,7 @@ class MsgAutoSender(object):
         #"Cookie": "; ".join(map(lambda x: "=".join(x), data.items()))
     }
 
-    messages = ["你好[微笑]"]
+    messages = ["在不在呢[疑问]"]
 
     data = {
         'txtLoginEMail': "",
@@ -90,17 +91,21 @@ class MsgAutoSender(object):
                                  rest={},
                                  rfc2109=False)
 
-    logger = logging.getLogger("send_msg")
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(logging.StreamHandler(sys.stdout))
-
-    try:
-        have_send_list = set(open("have_send_list.txt").read().strip(",").split(","))
-    except IOError:
-        have_send_list = set()
-
     def __init__(self):
+        self.page = 1
+        self.order = 1
+        self.product_ids = set()
         self.error_count = 0
+        self.lock = RLock()
+        self.alive = True
+        self.cookie = LWPCookieJar()
+        try:
+            self.have_send_list = set(open("have_send_list.txt").read().strip(",").split(","))
+        except IOError:
+            self.have_send_list = set()
+        self.logger = logging.getLogger("send_msg")
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.addHandler(logging.StreamHandler(sys.stdout))
 
     def get_account_times(self, opener):
         resp = opener.open(self.url7)
@@ -164,33 +169,33 @@ class MsgAutoSender(object):
 
     def search(self, opener):
         conti = True
-        count = 1
         while conti:
-            req = Request(url=self.url3 % count, headers=self.headers)
-            self.logger.debug("Start to find girls in page NO %s. "%count)
+
+            while True:
+                try:
+                    id = self.product_ids.pop()
+                except KeyError:
+                    break
+                self.send_msg(opener, id)
+                self.order += 1
+
+            req = Request(url=self.url3 % self.page, headers=self.headers)
+            self.logger.debug("Start to find girls in page NO.%s. "%self.page)
             resp = opener.open(req)
             self.logger.debug("Search response code:%s" % resp.code)
             buf = resp.read()
             data = json.loads(re.search(r"\((\{.*\})\)", buf).group(1), encoding="gbk")
             if data["result"]:
-                product_ids = set([i.split(":")[0] for i in data["result"].split(",")])
-                count += 1
-            elif count > 100:
+                self.product_ids = set([i.split(":")[0] for i in data["result"].split(",")])
+                self.page += 1
+            elif self.page > 100:
                 return "finished"
             else:
                 raise SendMessageError("You need relogin. ")
 
-            while True:
-                try:
-                    id = product_ids.pop()
-                except KeyError:
-                    break
-                self.send_msg(opener, id)
-
     def send_msg(self, opener, id):
 
-        s = self.have_send_list
-        if id not in s:
+        if id not in self.have_send_list:
             msg = random.choice(self.messages)
             d = quote(msg)
             url = self.url5 % (id, d)
@@ -199,18 +204,22 @@ class MsgAutoSender(object):
             buf = resp.read()
             recv = json.loads(re.search(r"\((\{.*\})\)", buf).group(1), encoding="gbk")
             code = recv["code"]
-            self.logger.debug("Send %s to %s, status code is %s" % (msg.decode("utf-8"), id, code))
+            self.logger.info("Send %s to No.%s girl whose id is %s, status code is %s" % (msg.decode("utf-8"), self.order, id, code))
             if code == 200:
                 if self.error_count > 0:
                     self.error_count -= 1
-                s.add(id)
+                self.have_send_list.add(id)
             else:
                 self.error_count += 1
+                if code == u"-701":
+                    self.alive = False
+                    self.logger.error(u"坑爹的百合每天每个账号只允许给100个人发消息。。")
+                    sys.exit(0)
                 if self.error_count > 3:
-                    raise SendMessageError("code: %s error: %s" % (code, (recv.get("msg") or u"empty").encode("utf-8")))
+                    raise SendMessageError("code: %s error: %s" % (code.encode("gbk"), (recv.get("msg") or u"empty").encode("gbk")))
             time.sleep(1)
         else:
-            self.logger.debug("This girl has been sent, don't molesting her any more. ")
+            self.logger.info("The No.%s girl whose id is %s has been sent, don't molesting her any more. "%(self.order, id))
 
     def pwd_input(self, msg=''):
 
@@ -252,18 +261,18 @@ class MsgAutoSender(object):
 
     def start(self):
         self.enter_msg()
-        cookie = LWPCookieJar()
-        cookie.set_cookie(self.acc_token)
+        self.cookie.set_cookie(self.acc_token)
         have_load = False
         try:
             if os.path.exists(("baihe.cookie")):
-                cookie.load("baihe.cookie", True, True)
-                self.logger.debug("Load cookies...")
+                self.cookie.load("baihe.cookie", True, True)
                 have_load = True
-            opener = build_opener(HTTPCookieProcessor(cookie))
+            opener = build_opener(HTTPCookieProcessor(self.cookie))
             if not have_load:
                 self.get_auth_cookies(opener)
                 self.get_search_cookies(opener)
+            # 有时意外不正常关闭cookie和send_list无法保存，所以启动一个进程来做这件事。
+            Thread(target=self.saveing).start()
             while True:
                 try:
                     if self.search(opener) == "finished":
@@ -277,10 +286,21 @@ class MsgAutoSender(object):
 
         except KeyboardInterrupt:
             self.logger.info("Closing...")
+            self.alive = False
         finally:
-            open("have_send_list.txt", "w").write(",".join(self.have_send_list))
-            self.logger.debug("Save cookies... ")
-            cookie.save("baihe.cookie", True, True)
+            self.save()
+            self.alive = False
+
+    def saveing(self):
+        while self.alive:
+            self.save()
+            time.sleep(2)
+
+    def save(self):
+        self.lock.acquire()
+        open("have_send_list.txt", "w").write(",".join(self.have_send_list))
+        self.cookie.save("baihe.cookie", True, True)
+        self.lock.release()
 
 
 if __name__ == "__main__":
