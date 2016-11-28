@@ -179,6 +179,7 @@ class MsgAutoSender(object):
             while product_ids:
                 id = product_ids.pop()
                 self.send_msg(opener, id)
+                time.sleep(1)
 
     def send_msg(self, opener, id):
 
@@ -228,7 +229,7 @@ class MsgAutoSender(object):
 
     def enter_msg(self):
         while True:
-            msg = raw_input("Please input what you want to send, input Enter button to break. ")
+            msg = raw_input("Please input what you want to send, input empty to break. ")
             if not msg:
                 break
             else:
@@ -255,7 +256,7 @@ class MsgAutoSender(object):
             while True:
                 try:
                     if self.search(opener) == "finished":
-                        self.logger.debug("No more girls to send. ")
+                        self.logger.info("No more girls to send. ")
                         break
                 except Exception, e:
                     time.sleep(1)
