@@ -54,6 +54,7 @@ class MsgAutoSender(object):
         'spmp':'4.20.53.225.685',
         '_': "%d"%(time.time()*1000)
     }
+
     # 预登陆url
     url1 = 'http://my.baihe.com/Getinterlogin/gotoLogin?jsonCallBack=jQuery18308807729283968166_%d&'%(time.time()*1000)
     # 登陆成功后跳转到主页
@@ -97,6 +98,9 @@ class MsgAutoSender(object):
         have_send_list = set(open("have_send_list.txt").read().strip(",").split(","))
     except IOError:
         have_send_list = set()
+
+    def __init__(self):
+        self.error_count = 0
 
     def get_account_times(self, opener):
         resp = opener.open(self.url7)
@@ -163,7 +167,7 @@ class MsgAutoSender(object):
         count = 1
         while conti:
             req = Request(url=self.url3 % count, headers=self.headers)
-            self.logger.debug("Start to find girls. ")
+            self.logger.debug("Start to find girls in page NO %s. "%count)
             resp = opener.open(req)
             self.logger.debug("Search response code:%s" % resp.code)
             buf = resp.read()
@@ -197,9 +201,13 @@ class MsgAutoSender(object):
             code = recv["code"]
             self.logger.debug("Send %s to %s, status code is %s" % (msg.decode("utf-8"), id, code))
             if code == 200:
+                if self.error_count > 0:
+                    self.error_count -= 1
                 s.add(id)
             else:
-                raise SendMessageError("code: %s error: %s" % (code, recv["msg"].encode("utf-8")))
+                self.error_count += 1
+                if self.error_count > 3:
+                    raise SendMessageError("code: %s error: %s" % (code, (recv.get("msg") or u"empty").encode("utf-8")))
             time.sleep(1)
         else:
             self.logger.debug("This girl has been sent, don't molesting her any more. ")
@@ -268,8 +276,9 @@ class MsgAutoSender(object):
                     self.get_search_cookies(opener)
 
         except KeyboardInterrupt:
-            open("have_send_list.txt", "w").write(",".join(self.have_send_list))
+            self.logger.info("Closing...")
         finally:
+            open("have_send_list.txt", "w").write(",".join(self.have_send_list))
             self.logger.debug("Save cookies... ")
             cookie.save("baihe.cookie", True, True)
 
