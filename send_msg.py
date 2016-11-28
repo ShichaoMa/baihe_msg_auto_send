@@ -129,14 +129,14 @@ class MsgAutoSender(object):
         req = Request(url=url, headers=self.headers)
         resp = opener.open(req)
         data = json.loads(re.search(r"\((\{.*\})\)", resp.read()).group(1), encoding="gbk")
-        self.logger.debug("Login first jsonp response state:%s"%data["state"])
+        self.logger.debug("Login jsonp response state:%s"%data["state"])
 
         if data["state"] == 0:
             return "Wrong account or password. "
 
         req = Request(url=self.url2, headers=self.headers)
         resp = opener.open(req)
-        self.logger.debug("Login second state code:%s"%resp.code)
+        self.logger.debug("Login redirect response code:%s"%resp.code)
 
     def get_auth_cookies(self, opener):
         while True:
@@ -182,7 +182,6 @@ class MsgAutoSender(object):
                 except KeyError:
                     break
                 self.send_msg(opener, id)
-                time.sleep(1)
 
     def send_msg(self, opener, id):
 
@@ -201,6 +200,7 @@ class MsgAutoSender(object):
                 s.add(id)
             else:
                 raise SendMessageError("code: %s error: %s" % (code, recv["msg"].encode("utf-8")))
+            time.sleep(1)
         else:
             self.logger.debug("This girl has been sent, don't molesting her any more. ")
 
