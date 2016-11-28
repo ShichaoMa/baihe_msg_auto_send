@@ -12,14 +12,6 @@
  sudo apt-get install  libjpeg8-dev zlib1g-dev    libfreetype6-dev liblcms2-dev libwebp-dev tcl8.5-dev tk8.5-dev python-tk
  # ubuntu 安装 imagemagick
  sudo  apt-get install imagemagick
-
-作者：夏洛之枫
-链接：https://zhuanlan.zhihu.com/p/23986959
-来源：知乎
-著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
- ubuntu用户还需要安装image magick
- linux环境下还未测试，可能有bug
- git clone https://github.com/ShichaoMa/baihe_msg_auto_send.git
  ```
 
 ## START
