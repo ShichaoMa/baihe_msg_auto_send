@@ -176,8 +176,11 @@ class MsgAutoSender(object):
             else:
                 raise SendMessageError("You need relogin. ")
 
-            while product_ids:
-                id = product_ids.pop()
+            while True:
+                try:
+                    id = product_ids.pop()
+                except KeyError:
+                    break
                 self.send_msg(opener, id)
                 time.sleep(1)
 
