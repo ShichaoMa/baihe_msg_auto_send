@@ -103,18 +103,27 @@ class MsgAutoSender():
         url = self.url1 + urlencode(self.data)
         req = Request(url=url, headers=self.headers)
         resp = opener.open(req)
+        data = json.loads(re.search(r"\((\{.*\})\)", resp.read()).group(1), encoding="gbk")
+        if data["state"]  == 0:
+            return "Wrong account or password. "
         print "Login first jsonp response code:%s"%resp.code
         req = Request(url=self.url2, headers=self.headers)
         resp = opener.open(req)
         print "Login second response code:%s"%resp.code
 
     def get_auth_cookies(self, opener):
-        captcha, tmpId = self.get_account_times(opener)
-        while not self.send_captcha(opener, captcha, tmpId):
+        while True:
             captcha, tmpId = self.get_account_times(opener)
-        self.data["codeValue"] = captcha
-        self.data["codeId"] = tmpId
-        self.login(opener)
+            while not self.send_captcha(opener, captcha, tmpId):
+                captcha, tmpId = self.get_account_times(opener)
+            self.data["codeValue"] = captcha
+            self.data["codeId"] = tmpId
+            result = self.login(opener)
+            if result:
+                print result
+                self.enter()
+            else:
+                break
 
     def get_search_cookies(self, opener):
         req = Request(url=self.url4, headers=self.headers)
@@ -188,6 +197,8 @@ class MsgAutoSender():
         account = raw_input("Please input your baihe account number: ")
         self.data["txtLoginEMail"] = account
         self.data["txtLoginPwd"] = self.pwd_input("Please input your baihe account password: ")
+
+    def ennter_msg(self):
         while True:
             msg = raw_input("Please input what you want to send, input Enter button to break. ")
             if not msg:
@@ -200,7 +211,7 @@ class MsgAutoSender():
                 self.messages.append(msg)
 
     def start(self):
-        self.enter()
+        self.ennter_msg()
         cookie = LWPCookieJar()
         cookie.set_cookie(self.acc_token)
         have_load = False
@@ -209,6 +220,8 @@ class MsgAutoSender():
                 cookie.load("baihe.cookie", True, True)
                 print "Load cookies..."
                 have_load = True
+            else:
+                self.enter()
             opener = build_opener(HTTPCookieProcessor(cookie))
             if not have_load:
                 self.get_auth_cookies(opener)
@@ -221,10 +234,8 @@ class MsgAutoSender():
                 except Exception:
                     time.sleep(1)
                     traceback.print_exc()
-                    cookie = LWPCookieJar()
-                    cookie.set_cookie(self.acc_token)
-                    opener = build_opener(HTTPCookieProcessor(cookie))
                     self.get_auth_cookies(opener)
+                    self.get_search_cookies(opener)
 
         except KeyboardInterrupt:
             open("have_send_list.txt", "w").write(",".join(self.get_have_sent_girls_set()))
@@ -236,5 +247,6 @@ class MsgAutoSender():
 if __name__ == "__main__":
     MsgAutoSender().start()
     #MsgAutoSender().search(build_opener())
+    #MsgAutoSender().send_msg(build_opener(), 141711936)
 
 
