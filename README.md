@@ -2,9 +2,9 @@
 
 
 ## INSTALL
-## windows
+## windows && ubuntu
  ```
- 需要安装PIL
+ windows 用户请去pypi下载pillow exe安装程序
  # ubuntu 安装pil
  # 安装pil
  sudo pip install pillow
