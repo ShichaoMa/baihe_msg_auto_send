@@ -43,7 +43,7 @@ class MsgAutoSender(object):
         #"Cookie": "; ".join(map(lambda x: "=".join(x), data.items()))
     }
 
-    messages = ["在不在呢[疑问]"]
+    messages = ["你好，你的眼睛很好看哦[调皮]，可以交个朋友吗[微笑]?"]
 
     data = {
         'txtLoginEMail': "",
@@ -205,13 +205,15 @@ class MsgAutoSender(object):
             recv = json.loads(re.search(r"\((\{.*\})\)", buf).group(1), encoding="gbk")
             code = recv["code"]
             self.logger.info("Send %s to No.%s girl whose id is %s, status code is %s" % (msg.decode("utf-8"), self.order, id, code))
-            if code == 200:
+            if code in [200, u"-603", u"-804", u"-602", u"-611"]:
+                self.logger.info("Normal message is %s" % (recv.get("msg") or u"empty").encode("gbk"))
                 if self.error_count > 0:
                     self.error_count -= 1
                 self.have_send_list.add(id)
             else:
+                self.logger.info("Error message is %s"%(recv.get("msg") or u"empty").encode("gbk"))
                 self.error_count += 1
-                if code == u"-701":
+                if code in [u"-701", u"-803"]:
                     self.alive = False
                     self.logger.error(u"坑爹的百合每天每个账号只允许给100个人发消息。。")
                     sys.exit(0)
