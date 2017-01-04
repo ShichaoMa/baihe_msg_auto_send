@@ -43,7 +43,10 @@ class MsgAutoSender(object):
         #"Cookie": "; ".join(map(lambda x: "=".join(x), data.items()))
     }
 
-    messages = ["你好，你的眼睛很好看哦[调皮]，可以交个朋友吗[微笑]?"]
+    messages = ["你好，你的眼睛很好看哦[调皮]，可以交个朋友吗[微笑]?",
+                "你的眼睛很漂亮哦，可以和你交个朋友吗[微笑]?",
+                "很喜欢你的眼睛，可以和你交个朋友吗[微笑]?",
+                "你的眼睛很好看嘛，可以认识一下交个朋友吗[微笑]?"]
 
     data = {
         'txtLoginEMail': "",
